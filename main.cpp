@@ -15,7 +15,8 @@ SERIAL COMMUNICATION
 #include "/headers/DS1631.h"
 #include "pindef.h"
 
-#define MOD2EX1 1
+#define MOD2EX1 0
+#define MOD2EX2 1
 
 // Serial tx, rx connected to the PC via an USB cable
 Serial device(UART_TX, UART_RX);
@@ -27,9 +28,31 @@ DS1631 sensor (I2C_SDA, I2C_SCL, 0x01);
 BusOut LEDS(LED1, LED_b);   // LD2, PA_9
 BusIn buttons(PA_10, PB_3, PB_5, PB_4);
 
+#if MOD2EX2
+InterruptIn button_press1(PA_10);
+InterruptIn button_press2(PB_3);
+InterruptIn button_press3(PB_5);
+InterruptIn button_press4(PB_4);
+
+void button_press1_ISR(){
+    LEDS[0] = 1;    // turn on LD2
+}
+
+void button_press2_ISR(){
+    LEDS[0] = 0;    // turn on LD2
+}
+
+void button_press3_ISR(){
+    LEDS[1] = 1;    // turn on PA_9
+}
+
+void button_press4_ISR(){
+    LEDS[1] = 0;    // turn off PA_9
+}
+#endif
+
 //Define a variable to store temperature measurement
 float temp;
-
 /*----------------------------------------------------------------------------
  MAIN function
  *----------------------------------------------------------------------------*/
@@ -38,8 +61,14 @@ int main() {
     device.printf("Hello mbed\r\n");
 	//Initialise the LCD
 	//Write your code here
-	
+#if MOD2EX2
+	button_press1.rise(&button_press1_ISR);
+    button_press2.rise(&button_press2_ISR);
+    button_press3.rise(&button_press3_ISR);
+    button_press4.rise(&button_press4_ISR);
+#endif
 	while(1){
+        __wfi();
 #if MOD2EX1
         // device.printf("Read: %x\r\n", buttons.read());
         switch (buttons) {
