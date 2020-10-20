@@ -16,7 +16,7 @@ SERIAL COMMUNICATION
 #include "pindef.h"
 
 #define MOD2EX1 0
-#define MOD2EX2 1
+#define MOD2EX2 0
 
 // Serial tx, rx connected to the PC via an USB cable
 Serial device(UART_TX, UART_RX);
@@ -27,6 +27,10 @@ DS1631 sensor (I2C_SDA, I2C_SCL, 0x01);
 //Write your code here
 BusOut LEDS(LED1, LED_b);   // LD2, PA_9
 BusIn buttons(PA_10, PB_3, PB_5, PB_4);
+
+PwmOut buzzer(PB_10);
+AnalogIn volume(PA_0);
+AnalogIn pitch(PA_1);
 
 #if MOD2EX2
 InterruptIn button_press1(PA_10);
@@ -51,6 +55,48 @@ void button_press4_ISR(){
 }
 #endif
 
+float map(float in, float inMin, float inMax, float outMin, float outMax) {
+  // check if it's within the range
+  if (inMin < inMax) { 
+    if (in <= inMin) 
+      return outMin;
+    if (in >= inMax)
+      return outMax;
+  } else {
+    if (in >= inMin) 
+      return outMin;
+    if (in <= inMax)
+      return outMax;
+  }
+  float scale = (in - inMin) / (inMax - inMin);
+  return outMin + scale * (outMax - outMin);
+}
+
+void update(float *vert, int16_t *horiz){
+    if(volume.read() != 0 && volume.read() < 1.0){
+        *vert = volume.read();
+        device.printf("Volume changed to %f\r\n", *vert);
+    }
+    if(pitch.read() != 0 && pitch.read() < 1.0){
+        *horiz = map(pitch.read(), 0.0, 1.0, 125, 3125);
+        device.printf("Period changed to %d uS\r\n", *horiz);
+    }
+}
+
+void sawTooth()
+{
+    static float height = 1.0, slope, i;
+    static int16_t width = 125;
+    slope = height / width;
+    while(1) {       // thread loop
+        update(&height, &width);
+        slope = height / width;
+        for(i = 0; i < width; i+=0.05) {
+            buzzer.write(i * slope);
+        }
+    }
+}
+
 //Define a variable to store temperature measurement
 float temp;
 /*----------------------------------------------------------------------------
@@ -68,7 +114,8 @@ int main() {
     button_press4.rise(&button_press4_ISR);
 #endif
 	while(1){
-        __wfi();
+        // __wfi();
+        sawTooth();
 #if MOD2EX1
         // device.printf("Read: %x\r\n", buttons.read());
         switch (buttons) {
