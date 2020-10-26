@@ -1,123 +1,161 @@
-/*----------------------------------------------------------------------------
-LAB EXERCISE 11.4- SPI and I2C interface
-SERIAL COMMUNICATION
- ----------------------------------------
- Display the temperature from the virtual DS1631 temperature sensor on the 
-      virtual LCD
- 
- Input: virtual DS1631 temperature sensor
- Output: virtual LCD display
-	
-	GOOD LUCK!
- *----------------------------------------------------------------------------*/
-
-#include "/headers/NHD_0216HZ.h"
-#include "/headers/DS1631.h"
+/**
+* @file main.cpp
+* @brief this main file contains the code to 
+* run the buttons, interrupts, analog parts of module 2.
+*
+* @author Dhruva Koley
+*
+* @date 10/26/2020
+*/
+#include "mbed.h"
 #include "pindef.h"
 
-#define MOD2EX1 0
-#define MOD2EX2 0
+// preprocessor defines to enable/disable parts of the program
+#define MOD2EX1 1   // buttons
+#define MOD2EX2 0   // interrupts
+#define MOD2EX3 0   // analog
 
 // Serial tx, rx connected to the PC via an USB cable
 Serial device(UART_TX, UART_RX);
 
-//Define the LCD and the temperature sensor
-NHD_0216HZ lcd (SPI_CS, SPI_MOSI, SPI_SCLK);
-DS1631 sensor (I2C_SDA, I2C_SCL, 0x01);
-//Write your code here
+// set up bus variables
 BusOut LEDS(LED1, LED_b);   // LD2, PA_9
 BusIn buttons(PA_10, PB_3, PB_5, PB_4);
 
+// set up analog variables
 PwmOut buzzer(PB_10);
 AnalogIn volume(PA_0);
 AnalogIn pitch(PA_1);
 
 #if MOD2EX2
+// set up button interrupts
 InterruptIn button_press1(PA_10);
 InterruptIn button_press2(PB_3);
 InterruptIn button_press3(PB_5);
 InterruptIn button_press4(PB_4);
 
-void button_press1_ISR(){
+/**
+* This ISR function is used to turn on LD2.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+void button_press1_ISR() {
     LEDS[0] = 1;    // turn on LD2
 }
 
-void button_press2_ISR(){
-    LEDS[0] = 0;    // turn on LD2
+/**
+* This ISR function is used to turn off LD2.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+void button_press2_ISR() {
+    LEDS[0] = 0;    // turn off LD2
 }
 
-void button_press3_ISR(){
+/**
+* This ISR function is used to turn on PA_9.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+void button_press3_ISR() {
     LEDS[1] = 1;    // turn on PA_9
 }
 
-void button_press4_ISR(){
+/**
+* This ISR function is used to turn off PA_9.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+void button_press4_ISR() {
     LEDS[1] = 0;    // turn off PA_9
 }
 #endif
 
-float map(float in, float inMin, float inMax, float outMin, float outMax) {
-  // check if it's within the range
-  if (inMin < inMax) { 
-    if (in <= inMin) 
+#if MOD2EX3
+/**
+* This function is used to map analog pitch values to scale
+* between 125 uS and 3125 uS.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+float map(float inVal, float inMin, float inMax, float outMin, float outMax) {
+  // check if inVal is within the range
+  if (inMin < inMax) {
+    if (inVal <= inMin) 
       return outMin;
-    if (in >= inMax)
+    if (inVal >= inMax)
       return outMax;
   } else {
-    if (in >= inMin) 
+    if (inVal >= inMin) 
       return outMin;
-    if (in <= inMax)
+    if (inVal <= inMax)
       return outMax;
   }
-  float scale = (in - inMin) / (inMax - inMin);
+  float scale = (inVal - inMin) / (inMax - inMin);
   return outMin + scale * (outMax - outMin);
 }
 
-void update(float *vert, int16_t *horiz){
-    if(volume.read() != 0 && volume.read() < 1.0){
+/**
+* This function is used to update the pitch and volume
+* values read by the potentiometers.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+void update(float *vert, int16_t *horiz) {
+    if(volume.read() != 0 && volume.read() < 1.0) {
         *vert = volume.read();
-        device.printf("Volume changed to %f\r\n", *vert);
+        device.printf("Volume changed to %0.2f\r\n", *vert);
     }
-    if(pitch.read() != 0 && pitch.read() < 1.0){
+    if(pitch.read() != 0 && pitch.read() < 1.0) {
         *horiz = map(pitch.read(), 0.0, 1.0, 125, 3125);
         device.printf("Period changed to %d uS\r\n", *horiz);
     }
 }
 
-void sawTooth()
-{
-    static float height = 1.0, slope, i;
-    static int16_t width = 125;
-    slope = height / width;
-    while(1) {       // thread loop
-        update(&height, &width);
+/**
+* This function is used to create sawtooth wave PWM samples
+* to write to the buzzer.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
+void sawTooth() {
+    static float height = 1.0; // full volume
+    static float slope, i;
+    static int16_t width = 125; // 125 uS period
+    slope = height / width; // get initial slope of the sawtooth wave
+    while(1) {
+        update(&height, &width);    // update height (volume) and width (pitch)
         slope = height / width;
-        for(i = 0; i < width; i+=0.05) {
-            buzzer.write(i * slope);
+        for(i = 0; i < width; i += 0.05) {
+            buzzer.write(i * slope);    // write PWM to buzzer. LPF to form actual sawtooth wave
         }
     }
 }
+#endif
 
-//Define a variable to store temperature measurement
-float temp;
-/*----------------------------------------------------------------------------
- MAIN function
- *----------------------------------------------------------------------------*/
-
+/**
+* This function is used to run the button, interrupts, analog
+* portions of module 2.
+* @author Dhruva Koley
+* @date 10/26/2020
+*/
 int main() {
     device.printf("Hello mbed\r\n");
-	//Initialise the LCD
-	//Write your code here
 #if MOD2EX2
+    // attach interrupts to ISR
 	button_press1.rise(&button_press1_ISR);
     button_press2.rise(&button_press2_ISR);
     button_press3.rise(&button_press3_ISR);
     button_press4.rise(&button_press4_ISR);
 #endif
-	while(1){
-        // __wfi();
+	while(1) {
+#if MOD2EX2
+        __wfi();
+#endif
+#if MOD2EX3
         sawTooth();
+#endif
 #if MOD2EX1
-        // device.printf("Read: %x\r\n", buttons.read());
         switch (buttons) {
         case 14:    // button 1
             LEDS[0] = 1;    // turn on LD2
@@ -139,14 +177,5 @@ int main() {
             break;
         }
 #endif
-		/*
-		Read the temperature from the DS1631
-		Update the LCD with new temperature measurement
-		*/
-		
-		//Write your code here
-		// sensor.read();
 	}
 }
-
-// *******************************ARM University Program Copyright (c) ARM Ltd 2014*************************************
