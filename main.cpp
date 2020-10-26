@@ -141,6 +141,7 @@ void sawTooth() {
 */
 int main() {
     device.printf("Hello mbed\r\n");
+
 #if MOD2EX2
     // attach interrupts to ISR
 	button_press1.rise(&button_press1_ISR);
@@ -156,6 +157,7 @@ int main() {
         sawTooth();
 #endif
 #if MOD2EX1
+
         switch (buttons) {
         case 14:    // button 1
             LEDS[0] = 1;    // turn on LD2
@@ -178,4 +180,5 @@ int main() {
         }
 #endif
 	}
+    return 0;
 }
